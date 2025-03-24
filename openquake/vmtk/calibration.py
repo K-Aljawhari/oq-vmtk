@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.linalg import eigh
 
-def calibrate_model(nst, gamma, sdof_capacity, isFrame, isSOS):    
+def calibrate_model(nst, gamma, sdofCapArray, isFrame, isSOS):    
     """
     Calibrate Multi-Degree-of-Freedom (MDOF) storey force-deformation relationships based on Single-Degree-of-Freedom (SDOF) capacity functions.
     
@@ -111,13 +111,33 @@ def calibrate_model(nst, gamma, sdof_capacity, isFrame, isSOS):
         
         # Normalize the mode shape (optional: to make sure it's unit norm)
         phi_mdof = first_mode / first_mode[-1]
-            
+    
+    
+        # Calculate the sum of the squares of phi
+        sum_square_phi = np.dot(phi_mdof, phi_mdof)
+    
+        # Calculate the sum of phi and then square it
+        sum_phi_square = np.power(np.sum(phi_mdof), 2)
+        
+        # Calculate the sum of mode shape
+        sum_phi = np.sum(phi_mdof)
+        
         # Calculate the mass at each floor node knowing the mode shape, effective mass (1 unit ton) and transformation factor
         mass = np.dot(np.dot(np.transpose(phi_mdof),I),phi_mdof)/np.power(np.dot(np.dot(np.transpose(phi_mdof),I),np.ones(nst)),2)
-                                
-        # Assign the MDOF mass        
-        flm_mdof = (np.diagonal(I)*mass).tolist()
+        
+        # mass = 1/(sum_square_phi*gamma)
+        
+        # Real Value of Gamma because of the asssumed mode shape
+        gamma_real = np.dot(np.dot(np.transpose(phi_mdof),I),np.ones(nst))/np.dot(np.dot(np.transpose(phi_mdof),I),phi_mdof)
                 
+        # Assign the MDOF mass
+        
+        flm_mdof = (np.diagonal(I)*mass).tolist()
+        # flm_mdof = [mass]*nst
+        
+        # Compute Lambda as per Lu et al (pay attention as one of the papers has a mistake)
+        lamda = np.dot(np.dot(np.transpose(phi_mdof),I),phi_mdof)/np.dot(np.dot(np.transpose(phi_mdof),K),phi_mdof)
+        
     elif isFrame and nst <= 12:
         
         phi_mdof = np.zeros(nst)
@@ -134,10 +154,19 @@ def calibrate_model(nst, gamma, sdof_capacity, isFrame, isSOS):
         
             I[-1,-1] = 0.75
             
+        
+        #     # flm_mdof = [mass]*nst
+        
         mass = np.dot(np.dot(np.transpose(phi_mdof),I),phi_mdof)/np.power(np.dot(np.dot(np.transpose(phi_mdof),I),np.ones(nst)),2)
-                
+        
+        # flm_mdof = [mass]*nst
+        
         flm_mdof = (np.diagonal(I)*mass).tolist()
         
+        gamma_real = np.dot(np.dot(np.transpose(phi_mdof),I),np.ones(nst))/np.dot(np.dot(np.transpose(phi_mdof),I),phi_mdof)
+              
+
+
     else:                         
     
         # Define the mass identity matrix (diagonal matrix that have 1). It assumes again that all masser are uniform
@@ -179,22 +208,48 @@ def calibrate_model(nst, gamma, sdof_capacity, isFrame, isSOS):
         # Normalize the mode shape (optional: to make sure it's unit norm)
         phi_mdof = first_mode / first_mode[-1]
     
+    
+        # Calculate the sum of the squares of phi
+        sum_square_phi = np.dot(phi_mdof, phi_mdof)
+    
+        # Calculate the sum of phi and then square it
+        sum_phi_square = np.power(np.sum(phi_mdof), 2)
+        
+        # Calculate the sum of mode shape
+        sum_phi = np.sum(phi_mdof)
+        
         # Calculate the mass at each floor node knowing the mode shape, effective mass (1 unit ton) and transformation factor
         mass = np.dot(np.dot(np.transpose(phi_mdof),I),phi_mdof)/np.power(np.dot(np.dot(np.transpose(phi_mdof),I),np.ones(nst)),2)
-                                
-        # Assign the MDOF mass        
-        flm_mdof = (np.diagonal(I)*mass).tolist()
+        
+        # mass = 1/(sum_square_phi*gamma)
+        
+        # Real Value of Gamma because of the asssumed mode shape
+        gamma_real = np.dot(np.dot(np.transpose(phi_mdof),I),np.ones(nst))/np.dot(np.dot(np.transpose(phi_mdof),I),phi_mdof)
                 
+        # Assign the MDOF mass
+        
+        flm_mdof = (np.diagonal(I)*mass).tolist()
+        # flm_mdof = [mass]*nst
+        
+        # Compute Lambda as per Lu et al (pay attention as one of the papers has a mistake)
+        lamda = np.dot(np.dot(np.transpose(phi_mdof),I),phi_mdof)/np.dot(np.dot(np.transpose(phi_mdof),K),phi_mdof)
+        
+        
     if nst == 1:
         
         gamma = 1.0   
 
     ### Get the MDOF Capacity Curves Storey-Deformation Relationship
-    rows, columns = np.shape(sdof_capacity)
+    rows, columns = np.shape(sdofCapArray)
     stD_mdof = np.zeros([nst,rows])
     stF_mdof = np.zeros([nst,rows])
+
+
+
+    # Compute the interstorey initial stiffness (in kN/m)
+    # k0 = lamda*4*pi**2*mass/T_sdof**2
     
-    if len(sdof_capacity) == 3: # In case of trilinear capacity curve
+    if len(sdofCapArray) == 3: # In case of trilinear capacity curve
         
         for i in range(nst):
             
@@ -205,10 +260,10 @@ def calibrate_model(nst, gamma, sdof_capacity, isFrame, isSOS):
                 # is different from the one in csv files. Technically, the multiplication outcome
                 # of the factors after sdofCapArray should be equal to 1.0, which is the effective
                 # mass of SDoF system
-                stF_mdof[i,:] = sdof_capacity[:,1]*gamma*np.dot(np.dot(np.transpose(phi_mdof),I*mass),np.ones(nst))
+                stF_mdof[i,:] = sdofCapArray[:,1]*gamma_real*np.dot(np.dot(np.transpose(phi_mdof),I*mass),np.ones(nst))
                 
                 # get the displacement or spectral displacement arrays at each storey
-                stD_mdof[i,:] = sdof_capacity[:,0]*gamma*phi_mdof[i]
+                stD_mdof[i,:] = sdofCapArray[:,0]*gamma_real*phi_mdof[i]
                 
                 # # Fix the initial stiffness to get the same period as the SDoF system
                 # stD_mdof[i,0] = stF_mdof[i,0]/(k0/9.81)
@@ -264,7 +319,7 @@ def calibrate_model(nst, gamma, sdof_capacity, isFrame, isSOS):
                     stD_mdof[i,:] = stD_mdof[0,:]*Ratio_disp
                 
                 
-    elif len(sdof_capacity) == 2: # In case of bilinear capacity curve
+    elif len(sdofCapArray) == 2: # In case of bilinear capacity curve
                 
                 
         for i in range(nst):
@@ -276,11 +331,11 @@ def calibrate_model(nst, gamma, sdof_capacity, isFrame, isSOS):
                 # is different from the one in csv files. Technically, the multiplication outcome
                 # of the factors after sdofCapArray should be equal to 1.0, which is the effective
                 # mass of SDoF system
-                stF_mdof[i,:] = sdof_capacity[:,1]*gamma*np.dot(np.dot(np.transpose(phi_mdof),I*mass),np.ones(nst))
+                stF_mdof[i,:] = sdofCapArray[:,1]*gamma_real*np.dot(np.dot(np.transpose(phi_mdof),I*mass),np.ones(nst))
                 
                 
                 # get the displacement or spectral displacement arrays at each storey
-                stD_mdof[i,:] = sdof_capacity[:,0]*gamma*phi_mdof[i]
+                stD_mdof[i,:] = sdofCapArray[:,0]*gamma_real*phi_mdof[i]
                 
                 # # Fix the initial stiffness to get the same period as the SDoF system
                 # stD_mdof[i,0] = stF_mdof[i,0]/(k0/9.81)
@@ -323,7 +378,7 @@ def calibrate_model(nst, gamma, sdof_capacity, isFrame, isSOS):
                     stD_mdof[i,:] = stD_mdof[0,:]*Ratio_disp
    
  
-    if len(sdof_capacity) == 4: # In case of quadrilinear capacity curve
+    if len(sdofCapArray) == 4: # In case of quadrilinear capacity curve
         
         for i in range(nst):
             
@@ -334,13 +389,27 @@ def calibrate_model(nst, gamma, sdof_capacity, isFrame, isSOS):
                 # is different from the one in csv files. Technically, the multiplication outcome
                 # of the factors after sdofCapArray should be equal to 1.0, which is the effective
                 # mass of SDoF system
-                stF_mdof[i,:] = sdof_capacity[:,1]*gamma*np.dot(np.dot(np.transpose(phi_mdof),I*mass),np.ones(nst))
+                stF_mdof[i,:] = sdofCapArray[:,1]*gamma_real*np.dot(np.dot(np.transpose(phi_mdof),I*mass),np.ones(nst))
                 
                 
                 # get the displacement or spectral displacement arrays at each storey
-                stD_mdof[i,:] = sdof_capacity[:,0]*gamma*phi_mdof[i]
-                                
-        
+                stD_mdof[i,:] = sdofCapArray[:,0]*gamma_real*phi_mdof[i]
+                
+                # # Fix the initial stiffness to get the same period as the SDoF system
+                # stD_mdof[i,0] = stF_mdof[i,0]/(k0/9.81)
+                # ## NOTE: the k0 is divided by 9.81 to maintain unit consistency because
+                # ## Moe multiplies all y-axis by g later in opensees
+                
+                # # Find the slope of the second branch of the capacity curve of first floor
+                # # to use it for predicting displacements of the other floors
+                # slope_2nd = (stF_mdof[0,1] - stF_mdof[0,0])/(stD_mdof[0,1] - stD_mdof[0,0])
+                
+                # # Find the slope of the third branch of the capacity curve of first floor
+                # # to use it for predicting displacements of the other floors
+                # slope_3rd = (stF_mdof[0,2] - stF_mdof[0,1])/(stD_mdof[0,2] - stD_mdof[0,1])
+               
+                
+            
             else:
                 
                 # Find the force contribution ratio, based on the mode shape (it works as
@@ -367,6 +436,18 @@ def calibrate_model(nst, gamma, sdof_capacity, isFrame, isSOS):
                 # Derive the displacements 
                 stD_mdof[i,:] = stD_mdof[0,:]*Ratio_disp
                 
+                # # Fix the initial stiffness to be the same as the first floor
+                # stD_mdof[i,0] = stF_mdof[i,0]/(k0/9.81)
+    
+                # # Find the displacement of the second branch
+                # stD_mdof[i,1] = stD_mdof[i,0] + (stF_mdof[i,1] - stF_mdof[i,0])/slope_2nd
+               
+                # # Find the displacement of the third branch
+                # stD_mdof[i,2] = stD_mdof[i,1] + (stF_mdof[i,2] - stF_mdof[i,1])/slope_3rd
+                
+                # The last displacement will stay the same 
+
+
                 # This is for the case that the ultimate displacement is less than
                 # the previous ones. I basically scale the previous displacements
                 # with the same scale of the ultimate displacement rather than
