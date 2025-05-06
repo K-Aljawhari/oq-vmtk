@@ -600,8 +600,9 @@ class postprocessor():
                 log_imls, edps = log_imls[valid_mask], edps[valid_mask]
             
                 # Apply censoring: replace values above censored_limit
-                is_censored = edps >= censored_limit
-                log_observed_edps = np.log(np.where(is_censored, censored_limit, edps))
+                not_censored = edps <= censored_limit
+                log_imls, edps = log_imls[not_censored], edps[not_censored]
+                log_observed_edps = np.log(edps)
                 
                 # Perform linear regression (ordinary least squares)
                 slope, intercept, r_value, p_value, std_err = stats.linregress(log_imls, log_observed_edps)
